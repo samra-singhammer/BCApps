@@ -52,7 +52,7 @@ codeunit 8063 "Sales Documents"
             SalesLine.SetRange("Document No.", Rec."No.");
             if SalesLine.FindSet() then
                 repeat
-                    ResetServiceCommitmentAndDeleteBillingLinesForSalesLine(SalesLine);
+                    ResetServiceCommitmentAndDeleteBillingLinesForCreditMemoSalesLine(SalesLine);
                 until SalesLine.Next() = 0;
         end else
             if AutoResetServiceCommitmentAndDeleteBillingLinesForSalesDocument(Rec."No.") then begin
@@ -97,7 +97,7 @@ codeunit 8063 "Sales Documents"
                 InvoiceNo := GetAppliesToDocNo(SalesHeader);
 
         if (Rec."Document Type" = Rec."Document Type"::"Credit Memo") and (InvoiceNo <> '') then
-            ResetServiceCommitmentAndDeleteBillingLinesForSalesLine(Rec)
+            ResetServiceCommitmentAndDeleteBillingLinesForCreditMemoSalesLine(Rec)
         else
             if AutoResetServiceCommitmentAndDeleteBillingLinesForSalesDocument(Rec."Document No.") then
                 ResetServiceCommitmentAndDeleteAllBillingLinesForDocument(Rec)
@@ -141,7 +141,7 @@ codeunit 8063 "Sales Documents"
         end;
     end;
 
-    local procedure ResetServiceCommitmentAndDeleteBillingLinesForSalesLine(SalesLine: Record "Sales Line")
+    local procedure ResetServiceCommitmentAndDeleteBillingLinesForCreditMemoSalesLine(SalesLine: Record "Sales Line")
     var
         BillingLine: Record "Billing Line";
     begin
@@ -150,7 +150,24 @@ codeunit 8063 "Sales Documents"
             BillingLine.FindFirstBillingLineForServiceCommitment(BillingLine);
             BillingLine.ResetServiceCommitmentNextBillingDate();
             BillingLine.DeleteAll(false);
+            DeleteAllRelatedUsageDataBillingsOnAfterDeleteAllBillingLines(BillingLine, SalesLine);
         end;
+    end;
+
+    local procedure DeleteAllRelatedUsageDataBillingsOnAfterDeleteAllBillingLines(BillingLine: Record "Billing Line"; SalesLine: Record "Sales Line")
+    var
+        UsageDataBilling: Record "Usage Data Billing";
+        SubscriptionLine: Record "Subscription Line";
+        UsageBasedDocTypeConversion: Codeunit "Usage Based Doc. Type Conv.";
+    begin
+        if not SubscriptionLine.Get(BillingLine."Subscription Line Entry No.") then
+            exit;
+        if not SubscriptionLine."Usage Based Billing" then
+            exit;
+        UsageDataBilling.SetRange("Subscription Line Entry No.", BillingLine."Subscription Line Entry No.");
+        UsageDataBilling.SetRange("Document Type", UsageBasedDocTypeConversion.ConvertSalesDocTypeToUsageBasedBillingDocType(SalesLine."Document Type"));
+        UsageDataBilling.SetRange("Document No.", SalesLine."Document No.");
+        UsageDataBilling.DeleteAll(false);
     end;
 
     local procedure FilterBillingLinePerSalesLine(var BillingLine: Record "Billing Line"; SalesLine: Record "Sales Line")
